@@ -1,20 +1,48 @@
+# ============================================================
+# Identity Server CI
+#
+# Application repositories intentionally contain very little
+# CI implementation.
+#
+# The actual pipeline implementation lives inside:
+#
+#   core-cloud-platform
+#
+# This lets every Java service follow the same standards.
+# ============================================================
+
 name: Identity Server CI
 
 on:
+
+  # Run CI whenever code is pushed to these branches.
   push:
     branches:
       - main
       - develop
-      
 
+  # Also validate pull requests before merge.
   pull_request:
+
 
 jobs:
 
-  build:
+  ci:
 
+    # Call the organization's reusable Java pipeline.
     uses: ppmcad16a-cloud-platform/core-cloud-platform/.github/workflows/java-app.yaml@main
 
     with:
+
+      # Java version required by this application.
       java-version: "21"
+
+      # Execute unit tests.
       run-tests: true
+
+      # NEW:
+      # After Java build succeeds, build the container.
+      build-docker: true
+
+      # Name used for the resulting Docker image.
+      image-name: "identity-server"
