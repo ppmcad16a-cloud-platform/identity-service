@@ -48,6 +48,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/address/*").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/address/*").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/address/delete/*").permitAll()
+                        // Kubernetes probes + Prometheus scrape (in-cluster only:
+                        // the public API gateway never routes these paths).
+                        .requestMatchers(HttpMethod.GET, "/health", "/ready", "/actuator/prometheus")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(
                         (request, response, ex) -> response.sendError(401, "Unauthorized")))
