@@ -1,0 +1,3 @@
+# Only the built JAR is needed by "docker build".
+*
+!target/*.jar

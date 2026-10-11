@@ -6,9 +6,9 @@ import com.mernecommerce.identity.repository.MerchantRepository;
 import com.mernecommerce.identity.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -17,10 +17,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // End-to-end (real Spring context, real HTTP dispatch via MockMvc) coverage
@@ -28,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // authenticated split can't be verified by unit-testing the controllers
 // directly (that bypasses Spring Security entirely), and this is also what
 // exercises SecurityConfig's @Bean factory methods themselves. Every
-// repository/MongoTemplate is @MockBean'd — no real MongoDB connection is
+// repository/MongoTemplate is @MockitoBean'd — no real MongoDB connection is
 // made.
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -37,22 +40,22 @@ class SecurityConfigTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private UserRepository userRepository;
-    @MockBean
+    @MockitoBean
     private AddressRepository addressRepository;
-    @MockBean
+    @MockitoBean
     private MerchantRepository merchantRepository;
-    @MockBean
+    @MockitoBean
     private BrandRepository brandRepository;
     // Spring Boot's auto-configured GridFsTemplate bean (unused by this app,
     // but still wired up by MongoDataAutoConfiguration) calls
     // mongoTemplate.getConverter() while *building the context itself* —
-    // before any @BeforeEach runs. A plain @MockBean returns null there,
+    // before any @BeforeEach runs. A plain @MockitoBean returns null there,
     // which blows up context startup with "MongoConverter must not be
     // null". RETURNS_DEEP_STUBS makes every unstubbed method (including
     // getConverter()) return a further mock instead of null.
-    @MockBean(answer = org.mockito.Answers.RETURNS_DEEP_STUBS)
+    @MockitoBean(answers = org.mockito.Answers.RETURNS_DEEP_STUBS)
     private MongoTemplate mongoTemplate;
 
     @Test
@@ -106,6 +109,38 @@ class SecurityConfigTest {
         mockMvc.perform(post("/api/auth/reset").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"old1\",\"confirmPassword\":\"new1\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // Kubernetes probes and Prometheus scrape without a JWT, so these must
+    // be reachable anonymously (they are NOT routed by the public gateway).
+    @Test
+    void livenessProbeIsPublicAndUp() throws Exception {
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"status\":\"UP\"")));
+    }
+
+    @Test
+    void readinessProbeIsPublic() throws Exception {
+        // Its result depends on MongoDB (mocked here), so only assert that
+        // Spring Security lets the probe through.
+        mockMvc.perform(get("/ready"))
+                .andExpect(result -> assertNotEquals(401, result.getResponse().getStatus()));
+    }
+
+    @Test
+    void prometheusMetricsArePublicAndIncludeHttpTimings() throws Exception {
+        mockMvc.perform(get("/api/user"));
+
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("http_server_requests_seconds")))
+                .andExpect(content().string(containsString("application=\"identity-service\"")));
+    }
+
+    @Test
+    void otherActuatorEndpointsAreNotExposed() throws Exception {
+        mockMvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
     }
 
     @Test

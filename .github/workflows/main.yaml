@@ -37,10 +37,6 @@ jobs:
       java-version: "21"
       build-docker: true
       image-name: identity-service
-      # TEMPORARY (until Phase 2): Spring Boot 3.3.5 ships ~40 fixable
-      # HIGH/CRITICAL CVEs. Phase 2 upgrades it, then this line is REMOVED
-      # so the vulnerability gate blocks the build again.
-      fail-on-vulnerabilities: false
 
   # Scan the whole git history for leaked secrets.
   secret-scan:
