@@ -18,6 +18,10 @@
 
 FROM eclipse-temurin:21-jre-alpine
 
+# Install the latest Alpine security patches. The base image is only rebuilt
+# every few weeks; this closes already-fixed OS CVEs (e.g. brotli) right away.
+RUN apk upgrade --no-cache
+
 RUN addgroup -S -g 10001 app && adduser -S -u 10001 -G app -H -s /sbin/nologin app
 
 WORKDIR /app
